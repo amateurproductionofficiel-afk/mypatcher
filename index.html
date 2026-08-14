@@ -212,7 +212,7 @@
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('sw.js').then(registration => {
                     // Force la vérification des mises à jour du patcher
-                    registration.update().catch(err => console.log("Mise à jour SW ignorée (désinstallé).")); 
+                    registration.update(); 
                 }).catch(error => {
                     console.error("Erreur d'enregistrement du Service Worker:", error);
                 });
