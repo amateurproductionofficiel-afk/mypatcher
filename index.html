@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auto-Patcher Code</title>
+    <style>
+        :root {
+            --bg: #1e1e1e;
+            --surface: #2d2d2d;
+            --text: #e0e0e0;
+            --accent: #8b5cf6;
+            --accent-hover: #7c3aed;
+            --border: #404040;
+        }
+
+        body, html {
+            margin: 0; padding: 0; height: 100%;
+            font-family: system-ui, sans-serif;
+            background-color: var(--bg); color: var(--text);
+            display: flex; flex-direction: column;
+            box-sizing: border-box;
+        }
+
+        header {
+            padding: 10px; background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            display: flex; gap: 8px; flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        button {
+            background: var(--surface); color: var(--text);
+            border: 1px solid var(--border); padding: 8px 16px;
+            border-radius: 6px; cursor: pointer; font-weight: bold;
+            transition: 0.2s; flex: 1; min-width: 80px;
+        }
+
+        button:hover { background: #3d3d3d; }
+        button:active { transform: scale(0.98); }
+        
+        .btn-primary { background: var(--accent); border-color: var(--accent); color: white; }
+        .btn-primary:hover { background: var(--accent-hover); }
+
+        .container {
+            flex: 1; display: flex; flex-direction: column;
+            padding: 10px; gap: 10px; overflow: hidden;
+        }
+
+        .label { font-size: 12px; color: #aaa; margin-bottom: 4px; font-weight: bold; text-transform: uppercase; }
+        
+        .textarea-wrapper {
+            display: flex; flex-direction: column; flex: 1;
+        }
+
+        textarea {
+            width: 100%; flex: 1; background: var(--surface);
+            color: #a6e22e; border: 1px solid var(--border);
+            border-radius: 8px; padding: 10px; font-family: monospace;
+            font-size: 13px; resize: none; outline: none; box-sizing: border-box;
+        }
+
+        textarea:focus { border-color: var(--accent); }
+        #diffInput { color: #fd971f; flex: 0.6; } /* Prend un peu moins de place que le code entier */
+        
+        .status { text-align: center; font-size: 12px; color: #888; padding: 4px; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <button onclick="undo()">⬅️ Retour</button>
+        <button onclick="redo()">➡️ Avant</button>
+        <button class="btn-primary" onclick="applyPatch()">⚡ Appliquer</button>
+        <button onclick="copyCode()">📋 Copier le code</button>
+    </header>
+
+    <div class="status" id="statusMsg">Prêt. Collez le code et les changements.</div>
+
+    <div class="container">
+        <div class="textarea-wrapper">
+            <div class="label">Changements IA (Format STRICT)</div>
+            <textarea id="diffInput" placeholder="<<<<&#10;Code à trouver&#10;====&#10;Nouveau code&#10;>>>>"></textarea>
+        </div>
+
+        <div class="textarea-wrapper">
+            <div class="label">Code Complet Actuel</div>
+            <textarea id="fullCodeInput" placeholder="Collez votre code source complet ici..."></textarea>
+        </div>
+    </div>
+
+    <script>
+        const diffInput = document.getElementById('diffInput');
+        const fullCodeInput = document.getElementById('fullCodeInput');
+        const statusMsg = document.getElementById('statusMsg');
+
+        // Système d'historique (State Machine)
+        let history = [];
+        let currentIndex = -1;
+
+        // Initialisation depuis le localStorage
+        window.onload = () => {
+            const savedHistory = localStorage.getItem('autoPatcherHistory');
+            const savedIndex = localStorage.getItem('autoPatcherIndex');
+            
+            if (savedHistory && savedIndex) {
+                history = JSON.parse(savedHistory);
+                currentIndex = parseInt(savedIndex);
+                if(history[currentIndex]) {
+                    fullCodeInput.value = history[currentIndex];
+                }
+            }
+        };
+
+        // Sauvegarder dans l'historique et localStorage
+        function saveState(newCode) {
+            // Si on écrit après un "Undo", on coupe le futur
+            if (currentIndex < history.length - 1) {
+                history = history.slice(0, currentIndex + 1);
+            }
+            history.push(newCode);
+            // Limite l'historique à 50 versions pour ne pas saturer le stockage
+            if (history.length > 50) history.shift(); 
+            currentIndex = history.length - 1;
+            
+            localStorage.setItem('autoPatcherHistory', JSON.stringify(history));
+            localStorage.setItem('autoPatcherIndex', currentIndex.toString());
+        }
+
+        // Sauvegarder manuellement si l'utilisateur tape directement dans le grand champ
+        fullCodeInput.addEventListener('change', () => {
+            if (fullCodeInput.value !== history[currentIndex]) {
+                saveState(fullCodeInput.value);
+                showStatus("Sauvegarde manuelle enregistrée.");
+            }
+        });
+
+        // Appliquer les changements (Le Moteur de recherche et remplace)
+        function applyPatch() {
+            let currentCode = fullCodeInput.value;
+            const diffText = diffInput.value;
+
+            if (!currentCode || !diffText) return showStatus("Les deux champs doivent être remplis.");
+
+            // Sauvegarde de l'état initial s'il n'y a pas d'historique
+            if (history.length === 0) saveState(currentCode);
+
+            // Regex stricte pour extraire le format <<<< ==== >>>>
+            const diffRegex = /<<<<\n([\s\S]*?)\n====\n([\s\S]*?)\n>>>>/g;
+            let match;
+            let appliedCount = 0;
+            let newCode = currentCode;
+
+            while ((match = diffRegex.exec(diffText)) !== null) {
+                const oldBlock = match[1];
+                const newBlock = match[2];
+
+                // Split & Join est plus sûr que String.replace() pour du code contenant des symboles
+                if (newCode.includes(oldBlock)) {
+                    newCode = newCode.split(oldBlock).join(newBlock);
+                    appliedCount++;
+                } else {
+                    console.warn("Ce bloc n'a pas été trouvé dans le code :", oldBlock);
+                }
+            }
+
+            if (appliedCount > 0) {
+                fullCodeInput.value = newCode;
+                diffInput.value = ''; // On vide la zone du haut !
+                saveState(newCode);
+                showStatus(`Succès ! ${appliedCount} modification(s) appliquée(s).`);
+            } else {
+                showStatus("Échec : Le code à remplacer n'a pas été trouvé. Vérifiez les espaces.");
+            }
+        }
+
+        function undo() {
+            if (currentIndex > 0) {
+                currentIndex--;
+                fullCodeInput.value = history[currentIndex];
+                localStorage.setItem('autoPatcherIndex', currentIndex.toString());
+                showStatus("Annulation effectuée.");
+            } else {
+                showStatus("Rien à annuler.");
+            }
+        }
+
+        function redo() {
+            if (currentIndex < history.length - 1) {
+                currentIndex++;
+                fullCodeInput.value = history[currentIndex];
+                localStorage.setItem('autoPatcherIndex', currentIndex.toString());
+                showStatus("Action rétablie.");
+            } else {
+                showStatus("Rien à rétablir.");
+            }
+        }
+
+        function copyCode() {
+            navigator.clipboard.writeText(fullCodeInput.value).then(() => {
+                showStatus("Code copié dans le presse-papiers !");
+            }).catch(err => {
+                showStatus("Erreur lors de la copie.");
+            });
+        }
+
+        function showStatus(msg) {
+            statusMsg.innerText = msg;
+            setTimeout(() => {
+                if(statusMsg.innerText === msg) statusMsg.innerText = "Prêt.";
+            }, 4000);
+        }
+    </script>
+</body>
+</html>
