@@ -15,6 +15,8 @@
             --accent: #8b5cf6;
             --accent-hover: #7c3aed;
             --border: #404040;
+            --install: #10b981;
+            --install-hover: #059669;
         }
 
         body, html {
@@ -44,6 +46,9 @@
         
         .btn-primary { background: var(--accent); border-color: var(--accent); color: white; }
         .btn-primary:hover { background: var(--accent-hover); }
+
+        .btn-install { background: var(--install); border-color: var(--install); color: white; display: none; }
+        .btn-install:hover { background: var(--install-hover); }
 
         .container {
             flex: 1; display: flex; flex-direction: column;
@@ -75,7 +80,8 @@
         <button onclick="undo()">⬅️ Retour</button>
         <button onclick="redo()">➡️ Avant</button>
         <button class="btn-primary" onclick="applyPatch()">⚡ Appliquer</button>
-        <button onclick="copyCode()">📋 Copier le code</button>
+        <button onclick="copyCode()">📋 Copier</button>
+        <button id="installBtn" class="btn-install">📲 Installer l'App</button>
     </header>
 
     <div class="status" id="statusMsg">Prêt. Collez le code et les changements.</div>
@@ -97,11 +103,10 @@
         const fullCodeInput = document.getElementById('fullCodeInput');
         const statusMsg = document.getElementById('statusMsg');
 
-        // Système d'historique (State Machine)
+        // --- Logique de l'Auto-Patcher ---
         let history = [];
         let currentIndex = -1;
 
-        // Initialisation depuis le localStorage
         window.onload = () => {
             const savedHistory = localStorage.getItem('autoPatcherHistory');
             const savedIndex = localStorage.getItem('autoPatcherIndex');
@@ -115,7 +120,6 @@
             }
         };
 
-        // Sauvegarder dans l'historique et localStorage
         function saveState(newCode) {
             if (currentIndex < history.length - 1) {
                 history = history.slice(0, currentIndex + 1);
@@ -135,7 +139,6 @@
             }
         });
 
-        // Appliquer les changements
         function applyPatch() {
             let currentCode = fullCodeInput.value;
             const diffText = diffInput.value;
@@ -207,12 +210,40 @@
             }, 4000);
         }
 
-        // --- PWA : Enregistrement du Service Worker ---
+        // --- Logique d'installation PWA ---
+        let deferredPrompt;
+        const installBtn = document.getElementById('installBtn');
+
+        // Intercepte l'événement d'installation natif
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            installBtn.style.display = 'block'; // Affiche le bouton vert
+        });
+
+        // Action au clic sur le bouton d'installation
+        installBtn.addEventListener('click', async () => {
+            if (deferredPrompt !== null) {
+                deferredPrompt.prompt();
+                const { outcome } = await deferredPrompt.userChoice;
+                if (outcome === 'accepted') {
+                    installBtn.style.display = 'none';
+                }
+                deferredPrompt = null;
+            }
+        });
+
+        window.addEventListener('appinstalled', () => {
+            installBtn.style.display = 'none';
+            deferredPrompt = null;
+        });
+
+        // --- Enregistrement du Service Worker ---
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('sw.js').then(registration => {
-                    // Force la vérification des mises à jour du patcher
-                    registration.update(); 
+                    // Force la vérification avec un .catch pour ignorer les erreurs de désinstallation
+                    registration.update().catch(err => console.log("Mise à jour SW ignorée.")); 
                 }).catch(error => {
                     console.error("Erreur d'enregistrement du Service Worker:", error);
                 });
