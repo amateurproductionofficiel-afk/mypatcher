@@ -1,0 +1,16 @@
+{
+  "name": "Auto-Patcher Code",
+  "short_name": "Patcher",
+  "description": "Outil d'injection de code rapide",
+  "start_url": "./patcher.html",
+  "display": "standalone",
+  "background_color": "#1e1e1e",
+  "theme_color": "#8b5cf6",
+  "icons": [
+    {
+      "src": "https://upload.wikimedia.org/wikipedia/commons/e/e0/Placeholder_LC.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}
