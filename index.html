@@ -150,6 +150,7 @@
             let match;
             let appliedCount = 0;
             let newCode = currentCode;
+            let failedBlocks = [];
 
             while ((match = diffRegex.exec(diffText)) !== null) {
                 const oldBlock = match[1];
@@ -160,16 +161,30 @@
                     appliedCount++;
                 } else {
                     console.warn("Ce bloc n'a pas été trouvé dans le code :", oldBlock);
+                    failedBlocks.push(oldBlock);
                 }
             }
 
-            if (appliedCount > 0) {
+            if (failedBlocks.length > 0) {
+                // Si au moins un bloc échoue, on annule tout par sécurité
+                let aiMessage = "L'Auto-Patcher a échoué. Il n'a pas trouvé ce(s) bloc(s) exact(s) dans mon code actuel :\n\n";
+                failedBlocks.forEach(block => {
+                    aiMessage += "```text\n" + block + "\n```\n\n";
+                });
+                aiMessage += "Peux-tu vérifier mon code actuel et regénérer la modification avec la syntaxe STRICTEMENT identique (espaces, sauts de ligne) ?";
+                
+                navigator.clipboard.writeText(aiMessage).then(() => {
+                    showStatus("Échec. Message pour l'IA copié dans le presse-papiers !");
+                }).catch(() => {
+                    showStatus("Échec. Code introuvable.");
+                });
+            } else if (appliedCount > 0) {
                 fullCodeInput.value = newCode;
                 diffInput.value = ''; 
                 saveState(newCode);
                 showStatus(`Succès ! ${appliedCount} modification(s) appliquée(s).`);
             } else {
-                showStatus("Échec : Le code à remplacer n'a pas été trouvé. Vérifiez les espaces.");
+                showStatus("Aucune balise de changement trouvée.");
             }
         }
 
